@@ -99,7 +99,7 @@ class HTTP_handler(object):
 	def reply_timed_out(self):
 		"""Sends a 408 client timed out message"""
 		self.send_reply(408)
-		
+	
 	def send_reply(self, status, content=None):
 		response = 'HTTP/1.1 {} {}\r\n'.format(status, status_codes[status])
 		if not content:
@@ -141,6 +141,8 @@ class HTTP_handler(object):
 				self.reply_invalid_file()
 		else:
 			self.reply_invalid_request()
+	
+
 
 class Handler_thread(threading.Thread):
 	def run(self, client_socket):

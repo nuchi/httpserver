@@ -1,3 +1,4 @@
+0. FIGURE OUT SOME TESTS
 1. Respond correctly to non-implemented methods
 2. Redo file-sending so that large files can be handled
     Ideas:

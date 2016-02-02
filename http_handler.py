@@ -7,7 +7,7 @@ import time
 status_codes = {200:'OK',
 				400:'Bad request',
 				404:'Not found',
-				405:'Method not allowed',
+				405:'Method not allowed', # not currently used!
 				408:'Request timeout'}
 FIRST_LINE_OK = 0
 TIMED_OUT = 1
@@ -21,8 +21,9 @@ class HTTP_handler(object):
 	
 	def read_first_line(self):
 		start_time = time.time()
-		# Worst case timing is MAX_WAIT_TIME seconds: if recv starts blocking at t=10-e.
-		# We'll also check in the read loop below whether it's been too long.
+		# Worst case timing is MAX_WAIT_TIME seconds. It's implemented both through
+		# socket timing out, and also manually checking whether we've been looping
+		# too long.
 		self.socket.settimeout(MAX_WAIT_TIME)
 		data = ''
 		size_remaining = 1024

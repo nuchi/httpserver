@@ -119,30 +119,35 @@ class HTTP_handler(object):
 	def handle_request(self):
 		"""This is a very permissive server. We'll only inspect
 		   the first line of the request, and check if it's something like
-		   /path/to/file """
+		   GET /path/to/file HTTP/1.1 """
 		
 		status, first_line = self.read_first_line()
 		
 		if status == TIMED_OUT:
 			self.reply_timed_out()
-			return True
+			return
 		elif status == LINE_TOO_LONG:
 			self.reply_invalid_request()
-			return True
+			return
 		# Otherwise status == FIRST_LINE_OK, and we continue
 		
 		is_valid_request, requested_file_path = self.get_path_from_request(first_line)
 		
-		if is_valid_request:
-			is_valid_file, requested_file = self.get_file(requested_file_path)
-			if is_valid_file:
-				self.reply_file(requested_file)
-			else:
-				self.reply_invalid_file()
-		else:
+		if not is_valid_request:
+			# Doesn't match GET /(URL-encoded-string) HTTP/#.#
 			self.reply_invalid_request()
+			return
+		
+		is_valid_file, requested_file = self.get_file(requested_file_path)
+		
+		if not is_valid_file:
+			# path doesn't resolve to something in the ./www/ directory
+			self.reply_invalid_file()
+			return
+		
+		# Everything seems to check out!
+		self.reply_file(requested_file)
 	
-
 
 class Handler_thread(threading.Thread):
 	def run(self, client_socket):

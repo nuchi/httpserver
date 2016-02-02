@@ -2,10 +2,12 @@ import threading
 import socket
 import re
 import os
+import time
 
 status_codes = {200:'OK',
 				400:'Bad request',
 				404:'Not found',
+				405:'Method not allowed',
 				408:'Request timeout'}
 FIRST_LINE_OK = 0
 TIMED_OUT = 1
@@ -16,9 +18,10 @@ class HTTP_handler(object):
 		self.socket = client_socket
 	
 	def read_first_line(self):
+		start_time = time.time()
+		# Worst case timing is 20 seconds: if recv starts blocking at t=10-e.
+		# We'll also check in the read loop below whether it's been too long.
 		self.socket.settimeout(10.0)
-		# Vulnerable to an attacker who is sending one byte every 5 seconds.
-		# Ah well. Not a priority right now.
 		data = ''
 		size_remaining = 1024
 		try:
@@ -28,6 +31,9 @@ class HTTP_handler(object):
 				new_data = self.socket.recv(size_remaining)
 				size_remaining -= len(new_data)
 				data += new_data
+				# Has it been too long since we started?
+				if time.time() - start_time > 10.0:
+					raise socket.timeout
 		except socket.timeout:
 			return (TIMED_OUT, '')
 		first_line = data[:data.find('\r\n')]
@@ -80,10 +86,14 @@ class HTTP_handler(object):
 		"""Sends a 404 Not found message"""
 		self.send_reply(404)
 	
+	def reply_invalid_method(self):
+		"""Sends a 405 method not allowed"""
+		self.send_reply(405)
+	
 	def reply_timed_out(self):
 		"""Sends a 408 client timed out message"""
 		self.send_reply(408)
-	
+		
 	def send_reply(self, status, content=None):
 		response = 'HTTP/1.1 {} {}\r\n'.format(status, status_codes[status])
 		if not content:
@@ -113,8 +123,8 @@ class HTTP_handler(object):
 		elif status == LINE_TOO_LONG:
 			self.reply_invalid_request()
 			return True
-		
 		# Otherwise status == FIRST_LINE_OK, and we continue
+		
 		is_valid_request, requested_file_path = self.get_path_from_request(first_line)
 		
 		if is_valid_request:

@@ -19,21 +19,24 @@ class HTTP_handler(object):
 	
 	def read_first_line(self):
 		start_time = time.time()
-		# Worst case timing is 20 seconds: if recv starts blocking at t=10-e.
+		# Worst case timing is MAX_WAIT_TIME seconds: if recv starts blocking at t=10-e.
 		# We'll also check in the read loop below whether it's been too long.
-		self.socket.settimeout(10.0)
+		self.socket.settimeout(MAX_WAIT_TIME)
 		data = ''
 		size_remaining = 1024
 		try:
 			while data.find('\r\n') == -1:
+				elapsed_time = time.time() - start_time
+				# Has it been too long since we started?
+				if elapsed_time > MAX_WAIT_TIME:
+					raise socket.timeout
+				self.socket.settimeout(MAX_WAIT_TIME - elapsed_time)
+				
 				if size_remaining == 0:
 					return (LINE_TOO_LONG, '')
 				new_data = self.socket.recv(size_remaining)
 				size_remaining -= len(new_data)
 				data += new_data
-				# Has it been too long since we started?
-				if time.time() - start_time > 10.0:
-					raise socket.timeout
 		except socket.timeout:
 			return (TIMED_OUT, '')
 		first_line = data[:data.find('\r\n')]

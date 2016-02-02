@@ -9,17 +9,17 @@ Debug = True
 # If Debug is True, we'll only allow local connections on port 8000
 # Otherwise, we'll accept connections from anywhere on port 80
 if Debug:
-	hostname = '127.0.0.1'
+	HOSTNAME = '127.0.0.1'
 	PORT = 8000
 else:
-	hostname = socket.gethostname()
+	HOSTNAME = socket.gethostname()
 	PORT = 80
 
 # Create new server.
 # Following lines adapted from
 # https://docs.python.org/2/howto/sockets.html
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((hostname, PORT))
+server.bind((HOSTNAME, PORT))
 server.listen(MAX_CONNECTIONS)
 
 try:

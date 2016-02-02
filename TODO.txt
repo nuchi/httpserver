@@ -1,0 +1,6 @@
+1. Respond correctly to non-implemented methods
+2. Redo file-sending so that large files can be handled
+    Ideas:
+        file size from os.path.getsize(path)
+        read and send in chunks, check for length sent and make sure it's ok
+3. send content-encoding headers

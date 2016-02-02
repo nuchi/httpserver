@@ -13,6 +13,8 @@ FIRST_LINE_OK = 0
 TIMED_OUT = 1
 LINE_TOO_LONG = 2
 
+MAX_WAIT_TIME = 10.0
+
 class HTTP_handler(object):
 	def __init__(self, client_socket):
 		self.socket = client_socket

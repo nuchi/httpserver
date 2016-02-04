@@ -82,7 +82,11 @@ class HTTP_handler(object):
 		# before sending it, instead of read-send-read-send.
 		content = f.read()
 		f.close()
-		self.send_reply(200, content)
+		# lookup file extension
+		extention = f.name.split('.')[-1] # file extension
+		extensions = {'jpg':'image/jpeg', 'txt':'text/plain'}
+		contentType = extensions.get(extention, None)
+		self.send_reply(200, content, contentType=contentType)
 	
 	def reply_invalid_request(self):
 		"""Sends a 400 bad request"""
@@ -100,12 +104,15 @@ class HTTP_handler(object):
 		"""Sends a 408 client timed out message"""
 		self.send_reply(408)
 	
-	def send_reply(self, status, content=None):
+	def send_reply(self, status, content=None, contentType=None):
 		response = 'HTTP/1.1 {} {}\r\n'.format(status, status_codes[status])
 		if not content:
 			content = status_codes[status]
 		
+		if contentType:
+			response += 'Content-Type: {}\r\n'.format(contentType)
 		response += 'Content-Length: {}\r\n\r\n'.format(len(content))
+		
 		response += content
 		
 		try:

@@ -18,7 +18,7 @@ class TestServerResponses(unittest.TestCase):
 		response = requests.get(base_url+'/no_such_file.txt')
 		self.assertEqual(response.status_code, 404)
 	
-	@unittest.skip('405 status code not implemented yet')
+	
 	def test_method_not_allowed(self):
 		response = requests.post(base_url+'/')
 		self.assertEqual(response.status_code, 405)
@@ -30,7 +30,7 @@ class TestServerResponses(unittest.TestCase):
 		time.sleep(11.0)
 		response = timing_out_socket.recv(1024)
 		timing_out_socket.close()
-		self.assertEqual(response[:13], 'HTTP/1.1 408 ')
+		self.assertEqual(response.split(' ', 2)[1], '408')
 	
 	def test_path_safety(self):
 		paths_and_responses = {'/test.txt':200,

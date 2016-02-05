@@ -3,6 +3,7 @@ import socket
 import re
 import os
 import time
+import subprocess
 
 status_codes = {200:'OK',
 				400:'Bad request',
@@ -42,6 +43,8 @@ def socket_lines(sock, wait_time=MAX_WAIT_TIME):
 		elif not buffering:
 			yield buff
 	
+
+
 class HTTP_Responder(object):
 	def __init__(self, client_socket):
 		self.socket = client_socket
@@ -94,18 +97,27 @@ class HTTP_Responder(object):
 			self.socket.close()
 	
 
+
 class Base_Request_handler(object):
-	def __init__(self, method, path, contents_generator, sock):
+	def __init__(self, method, path, headers, body, sock):
 		self.method = method
 		self.path = path
-		self.contents_generator = contents_generator
+		self.headers = headers
+		self.body = body
+		#self.contents_generator = contents_generator
 		self.socket = sock
-		
+	
+
 
 class Static_handler(Base_Request_handler):
 	def handle_request(self):
 		responder = HTTP_Responder(self.socket)
 		path = 'www'+self.path
+		
+		if self.method != 'GET':
+			responder.reply_invalid_method()
+			return
+		
 		try:
 			f = open(path)
 		except IOError:
@@ -113,19 +125,66 @@ class Static_handler(Base_Request_handler):
 			return
 		
 		responder.reply_file(f)
+	
+
 
 class CGI_handler(Base_Request_handler):
-	pass
+	def handle_request(self):
+		responder = HTTP_Responder(self.socket)
+		path = self.path[1:]
+		
+		if not os.path.isfile(path):
+			responder.reply_invalid_file()
+			return
+		
+		
+
 
 
 class HTTP_handler(object):
 	def __init__(self, client_socket):
 		self.socket = client_socket
 	
+	def read_and_parse_request(self, wait_time=MAX_WAIT_TIME):
+		start_time = time.time()
+		request = ''
+		buffering = True
+		while buffering:
+			elapsed_time = time.time() - start_time
+			if elapsed_time > wait_time:
+				raise socket.timeout
+			self.socket.settimeout(wait_time - elapsed_time)
+			new_input = self.socket.recv(4096)
+			
+			if not new_input:
+				buffering = False
+			
+			request += new_input
+			
+			# Check if we're done
+			if '\r\n\r\n' in request:
+				status_line, headers, body = self.parse_request(request)
+				temp_headers = map(lambda x: x.split(':',1), headers)
+				temp_headers = map(lambda y: (y[0].lower(), y[1]), temp_headers)
+				header_dict = dict(temp_headers)
+				if int(header_dict.get('content-length', 0)) == len(body):
+					return status_line, temp_headers, body
+			
+		raise BadRequestException
+	
+	def parse_request(self, request):
+		try:
+			status_and_headers, body = request.split('\r\n\r\n', 1)
+		except ValueError:
+			raise BadRequestException
+		status_and_headers = status_and_headers.split('\r\n')
+		status_line, headers = status_and_headers[0], status_and_headers[1:]
+		return status_line, headers, body
+		
+	
 	def method_and_path_from_line(self, first_line):
 		try:
-			line, _ = first_line.split('\r\n')
-			method, path, _ = line.split(' ', 2)
+			method, path, _ = first_line.split(' ', 2)
 			path = self.parse_and_normalize_path(path)
 			return method, path
 		except ValueError:
@@ -151,27 +210,32 @@ class HTTP_handler(object):
 		""" Parses the first line, and hands off the connection to either
 			the static file handler or the cgi handler. """
 		
-		socket_lines_gen = socket_lines(self.socket)
-		
+		# Get entire http request: status_line, headers, body
 		try:
-			first_line = socket_lines_gen.next()
+			status_line, headers, body = self.read_and_parse_request()
 		except socket.timeout:
 			HTTP_Responder(self.socket).reply_timed_out()
 			return
-		
-		try:			
-			method, path = self.method_and_path_from_line(first_line)
 		except BadRequestException:
 			HTTP_Responder(self.socket).reply_invalid_request()
 			return
 		
+		# Split status line into method and path
+		try:			
+			method, path = self.method_and_path_from_line(status_line)
+		except BadRequestException:
+			HTTP_Responder(self.socket).reply_invalid_request()
+			return
+		
+		# Route request to the CGI or static handler
 		if path.startswith('/cgi-bin/'):
-			handler = CGI_handler(method, path, socket_lines_gen, self.socket)
+			handler = CGI_handler(method, path, headers, body, self.socket)
 		else:
-			handler = Static_handler(method, path, socket_lines_gen, self.socket)
+			handler = Static_handler(method, path, headers, body, self.socket)
 		
 		handler.handle_request()
 	
+
 
 class Handler_thread(threading.Thread):
 	def run(self, client_socket):

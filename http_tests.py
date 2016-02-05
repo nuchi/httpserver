@@ -14,10 +14,6 @@ class TestServerResponses(unittest.TestCase):
 		response = requests.get(base_url+'/test.txt')
 		self.assertEqual(response.status_code, 200)
 	
-	def test_request_too_long(self):
-		response = requests.get(base_url+'/'+'a'*1024)
-		self.assertEqual(response.status_code, 400)
-	
 	def test_file_not_found(self):
 		response = requests.get(base_url+'/no_such_file.txt')
 		self.assertEqual(response.status_code, 404)
@@ -53,6 +49,7 @@ class TestServerResponses(unittest.TestCase):
 		response = f.readline()
 		f.close()
 		self.assertEqual(response[:13], 'HTTP/1.1 400 ')
+	
 
 if __name__ == '__main__':
 	server_thread = threading.Thread(target=httpserver.create_and_run_server)

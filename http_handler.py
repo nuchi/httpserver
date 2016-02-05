@@ -167,8 +167,9 @@ class HTTP_handler(object):
 				temp_headers = map(lambda x: x.split(':',1), headers)
 				temp_headers = map(lambda y: (y[0].lower(), y[1]), temp_headers)
 				header_dict = dict(temp_headers)
-				if int(header_dict.get('content-length', 0)) == len(body):
-					return status_line, temp_headers, body
+				content_length = int(header_dict.get('content-length', 0))
+				if len(body) >= content_length:
+					return status_line, temp_headers, body[:content_length]
 			
 		raise BadRequestException
 	

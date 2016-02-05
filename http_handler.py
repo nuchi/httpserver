@@ -165,7 +165,7 @@ class HTTP_handler(object):
 			if '\r\n\r\n' in request:
 				status_line, headers, body = self.parse_request(request)
 				temp_headers = map(lambda x: x.split(':',1), headers)
-				temp_headers = map(lambda y: (y[0].lower(), y[1]), temp_headers)
+				temp_headers = map(lambda y: (y[0].lower(), y[1].strip()), temp_headers)
 				header_dict = dict(temp_headers)
 				content_length = int(header_dict.get('content-length', 0))
 				if len(body) >= content_length:

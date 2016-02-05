@@ -156,7 +156,9 @@ class HTTP_handler(object):
 			self.socket.settimeout(wait_time - elapsed_time)
 			new_input = self.socket.recv(4096)
 			
-			if not new_input:
+			if not new_input or len(request)+len(new_input) > 4096:
+				# Connection has closed; or request is too big.
+				# Max possible length is 8192 (receive 4096 twice)
 				buffering = False
 			
 			request += new_input
@@ -166,10 +168,11 @@ class HTTP_handler(object):
 				status_line, headers, body = self.parse_request(request)
 				temp_headers = map(lambda x: x.split(':',1), headers)
 				temp_headers = map(lambda y: (y[0].lower(), y[1].strip()), temp_headers)
+				# header_dict = self.combine_duplicate_headers(temp_headers) NOT IMPLEMENTED
 				header_dict = dict(temp_headers)
 				content_length = int(header_dict.get('content-length', 0))
 				if len(body) >= content_length:
-					return status_line, temp_headers, body[:content_length]
+					return status_line, header_dict, body[:content_length]
 			
 		raise BadRequestException
 	
@@ -182,6 +185,11 @@ class HTTP_handler(object):
 		status_line, headers = status_and_headers[0], status_and_headers[1:]
 		return status_line, headers, body
 		
+	
+	def combine_duplicate_headers(self, header_list):
+		pass
+	
+	
 	
 	def method_and_path_from_line(self, first_line):
 		try:

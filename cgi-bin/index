@@ -1,12 +1,17 @@
 #!/bin/bash
-# hardcoded paths because CGI tramples PATH variable
 
+# hardcoded paths because setting environment variables for CGI tramples the PATH variable
 JQ="/usr/local/bin/jq"
+	# jq: JSON-parsing command-line tool. Using it so that node can return multiple pieces.
+	# I could alternatively have node generate the entire response; don't know file io yet.
 NODE="/usr/local/bin/node"
 PANDOC="/usr/local/bin/pandoc"
 ASSETS="/Users/haggai/tripleByte/httpserver/assets"
 
 JSON=$($NODE $ASSETS/index.js)
+# returns {"cookie":"Set-cookie: name=foo","body":"markdown-formatted text"}
+# or {"cookie":"", "body":"..."} if no cookie to set.
+
 COOKIE=$(<<<"$JSON" $JQ -r .cookie)
 BODY=$(<<<"$JSON" $JQ -r .body | $PANDOC -f markdown -t html)
 
@@ -25,5 +30,3 @@ DOC=$(<<<"$BODY" wrap)
 
 
 printf %s%s "$HEADERS" "$DOC"
-#>&2 echo -ne "$FINAL"
-#printf %s "$FINAL"

@@ -14,6 +14,7 @@ class HTTPserver(object):
 		else:
 			self.hostname = socket.gethostname()
 		self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	
 	def serve(self):
 		self.server.bind((self.hostname, self.port))

@@ -15,7 +15,7 @@ FIRST_LINE_OK = 0
 TIMED_OUT = 1
 LINE_TOO_LONG = 2
 
-MAX_WAIT_TIME = 10.0
+MAX_WAIT_TIME = 300.0
 
 class BadRequestException(Exception):
 	pass
@@ -114,8 +114,6 @@ class HTTP_Responder(object):
 		except:
 			print('An error occurred while sending the reply.')
 			pass
-		finally:
-			self.socket.close()
 	
 
 
@@ -195,10 +193,13 @@ class CGI_handler(Base_Request_handler):
 class HTTP_handler(object):
 	def __init__(self, client_socket):
 		self.socket = client_socket
+		self.request_buffer = ''
+		self.keep_alive = True
+		self.requests_handled = 0
 	
 	def read_and_parse_request(self, wait_time=MAX_WAIT_TIME):
 		start_time = time.time()
-		request = ''
+		#request = ''
 		buffering = True
 		while buffering:
 			elapsed_time = time.time() - start_time
@@ -207,19 +208,22 @@ class HTTP_handler(object):
 			self.socket.settimeout(wait_time - elapsed_time)
 			new_input = self.socket.recv(4096)
 			
-			if not new_input or len(request)+len(new_input) > 4096:
+			if not new_input or len(self.request_buffer)+len(new_input) > 4096:
 				# Connection has closed; or request is too big.
 				# Max possible length is 8192 (receive 4096 twice)
 				buffering = False
 			
-			request += new_input
+			self.request_buffer += new_input
 			
 			# Check if we're done
-			if '\r\n\r\n' in request:
-				status_line, headers, body = self.parse_request(request)
+			if '\r\n\r\n' in self.request_buffer:
+				status_line, headers, body = self.parse_request(self.request_buffer)
 				header_dict = parse_headers(headers, lowercaselabels=True)
 				content_length = int(header_dict.get('content-length', 0))
 				if len(body) >= content_length:
+					_, remaining_request = self.request_buffer.split('\r\n\r\n', 1)
+					remaining_request = remaining_request[content_length:]
+					self.request_buffer = remaining_request
 					return status_line, header_dict, body[:content_length]
 			
 		raise BadRequestException
@@ -267,30 +271,38 @@ class HTTP_handler(object):
 		""" Parses the first line, and hands off the connection to either
 			the static file handler or the cgi handler. """
 		
-		# Get entire http request: status_line, headers, body
-		try:
-			status_line, headers, body = self.read_and_parse_request()
-		except socket.timeout:
-			HTTP_Responder(self.socket).reply_timed_out()
-			return
-		except BadRequestException:
-			HTTP_Responder(self.socket).reply_invalid_request()
-			return
+		while self.keep_alive:
+			# Get entire http request: status_line, headers, body
+			try:
+				status_line, headers, body = self.read_and_parse_request()
+				if headers.get('connection') == 'keep-alive':
+					self.keep_alive = True
+				else:
+					self.keep_alive = False
+			except socket.timeout:
+				HTTP_Responder(self.socket).reply_timed_out()
+				return
+			except BadRequestException:
+				HTTP_Responder(self.socket).reply_invalid_request()
+				return
 		
-		# Split status line into method and path
-		try:			
-			method, path = self.method_and_path_from_line(status_line)
-		except BadRequestException:
-			HTTP_Responder(self.socket).reply_invalid_request()
-			return
+			# Split status line into method and path
+			try:			
+				method, path = self.method_and_path_from_line(status_line)
+			except BadRequestException:
+				HTTP_Responder(self.socket).reply_invalid_request()
+				return
 		
-		# Route request to the CGI or static handler
-		if path.startswith('/cgi-bin/'):
-			handler = CGI_handler(method, path, headers, body, self.socket)
-		else:
-			handler = Static_handler(method, path, headers, body, self.socket)
+			# Route request to the CGI or static handler
+			if path.startswith('/cgi-bin/'):
+				handler = CGI_handler(method, path, headers, body, self.socket)
+			else:
+				handler = Static_handler(method, path, headers, body, self.socket)
 		
-		handler.handle_request()
+			handler.handle_request()
+			self.requests_handled += 1
+			print self.requests_handled
+		self.socket.close()
 	
 
 

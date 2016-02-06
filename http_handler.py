@@ -9,7 +9,8 @@ status_codes = {200:'OK',
 				400:'Bad request',
 				404:'Not found',
 				405:'Method not allowed', # not currently used!
-				408:'Request timeout'}
+				408:'Request timeout',
+				500:'Internal server error'}
 FIRST_LINE_OK = 0
 TIMED_OUT = 1
 LINE_TOO_LONG = 2
@@ -18,6 +19,19 @@ MAX_WAIT_TIME = 10.0
 
 class BadRequestException(Exception):
 	pass
+
+
+def parse_headers(headers, lowercaselabels=False):
+	temp_headers = map(lambda x: x.split(':',1), headers)
+	#print(temp_headers)
+	if lowercaselabels:
+		temp_headers = map(lambda y: (y[0].lower(), y[1].strip()), temp_headers)
+	else:
+		temp_headers = map(lambda y: (y[0], y[1].strip()), temp_headers)
+	# header_dict = combine_duplicate_headers(temp_headers) NOT IMPLEMENTED
+	header_dict = dict(temp_headers)
+	return header_dict
+
 
 def socket_lines(sock, wait_time=MAX_WAIT_TIME):
 	""" Adapted from Aaron Watters at stackoverflow """
@@ -65,6 +79,10 @@ class HTTP_Responder(object):
 		"""Sends a 408 client timed out message"""
 		self.send_reply(408)
 	
+	def reply_internal_error(self):
+		"""Sends 500 internal error message"""
+		self.send_reply(500)
+	
 	def reply_file(self, f):
 		"""Sends a 200 OK, and a file object"""
 		# Not good for very large files. It reads the whole object
@@ -77,15 +95,18 @@ class HTTP_Responder(object):
 		contentType = extensions.get(extention, None)
 		self.send_reply(200, content, contentType=contentType)
 	
-	def send_reply(self, status, content=None, contentType=None):
+	def send_reply(self, status, content='', contentType=None, headers=None):
 		response = 'HTTP/1.1 {} {}\r\n'.format(status, status_codes[status])
-		if not content:
-			content = status_codes[status]
+		if not headers:
+			if contentType:
+				response += 'Content-Type: {}\r\n'.format(contentType)
+			if content:
+				response += 'Content-Length: {}\r\n'.format(len(content))
+		else:
+			for header in headers:
+				response += '{}: {}\r\n'.format(header, headers[header])
 		
-		if contentType:
-			response += 'Content-Type: {}\r\n'.format(contentType)
-		response += 'Content-Length: {}\r\n\r\n'.format(len(content))
-		
+		response += '\r\n'
 		response += content
 		
 		try:
@@ -133,11 +154,41 @@ class CGI_handler(Base_Request_handler):
 		responder = HTTP_Responder(self.socket)
 		path = self.path[1:]
 		
+		if self.method not in ['GET','POST']:
+			responder.reply_invalid_method()
+			return
+		
 		if not os.path.isfile(path):
 			responder.reply_invalid_file()
 			return
 		
+		# Don't pass unmodified headers as environment variables, otherwise
+		# an attacker could send e.g. 'Path:' as a header and mess things up.
+		cgi_headers = {}
+		for header in self.headers:
+			cgi_header = header.upper().replace('-','_')
+			if re.match('^[A-Z_]*$', cgi_header):
+				cgi_headers['CLIENT_'+cgi_header] = self.headers[header]
 		
+		try:
+			proc = subprocess.Popen([path], env=cgi_headers, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+			output, _ = proc.communicate(input=self.body)
+		except:
+			responder.reply_internal_error()
+			return
+		
+		try:
+			response_headers, response_body = output.split('\r\n\r\n', 1)
+		except:
+			print(output)
+			responder.reply_internal_error()
+			return
+			
+		response_header_dict = parse_headers(response_headers.split('\r\n'))
+		if response_body:
+			response_header_dict['Content-Length'] = len(response_body)
+		
+		responder.send_reply(200, content=response_body, headers=response_header_dict)
 
 
 
@@ -166,10 +217,7 @@ class HTTP_handler(object):
 			# Check if we're done
 			if '\r\n\r\n' in request:
 				status_line, headers, body = self.parse_request(request)
-				temp_headers = map(lambda x: x.split(':',1), headers)
-				temp_headers = map(lambda y: (y[0].lower(), y[1].strip()), temp_headers)
-				# header_dict = self.combine_duplicate_headers(temp_headers) NOT IMPLEMENTED
-				header_dict = dict(temp_headers)
+				header_dict = parse_headers(headers, lowercaselabels=True)
 				content_length = int(header_dict.get('content-length', 0))
 				if len(body) >= content_length:
 					return status_line, header_dict, body[:content_length]

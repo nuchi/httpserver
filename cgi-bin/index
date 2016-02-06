@@ -1,0 +1,29 @@
+#!/bin/bash
+# hardcoded paths because CGI tramples PATH variable
+
+JQ="/usr/local/bin/jq"
+NODE="/usr/local/bin/node"
+PANDOC="/usr/local/bin/pandoc"
+ASSETS="/Users/haggai/tripleByte/httpserver/assets"
+
+JSON=$($NODE $ASSETS/index.js)
+COOKIE=$(<<<"$JSON" $JQ -r .cookie)
+BODY=$(<<<"$JSON" $JQ -r .body | $PANDOC -f markdown -t html)
+
+if test -z "$COOKIE"
+then
+	printf -v HEADERS %s\\r\\n\\r\\n 'Content-type: text/html; charset=utf-8'
+else
+	printf -v HEADERS %s\\r\\n%s\\r\\n\\r\\n 'Content-type: text/html; charset=utf-8' "$COOKIE"
+fi
+
+wrap () {
+	cat $ASSETS/header.html - $ASSETS/footer.html
+}
+
+DOC=$(<<<"$BODY" wrap)
+
+
+printf %s%s "$HEADERS" "$DOC"
+#>&2 echo -ne "$FINAL"
+#printf %s "$FINAL"

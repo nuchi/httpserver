@@ -46,7 +46,7 @@ function process_input_and_name() {
 function writeform() {
 	add_to_output('<form action="index" method="POST">');
 	add_to_output('<input type="text" name="name"/>');
-	add_to_output('<input type="submit"/></form>');
+	add_to_output('<input type="submit" value="Submit"/></form>');
 }
 
 function add_to_output(s) {

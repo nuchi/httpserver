@@ -15,7 +15,7 @@ FIRST_LINE_OK = 0
 TIMED_OUT = 1
 LINE_TOO_LONG = 2
 
-MAX_WAIT_TIME = 300.0
+MAX_WAIT_TIME = 10.0
 
 class BadRequestException(Exception):
 	pass
@@ -196,13 +196,12 @@ class HTTP_handler(object):
 		self.request_buffer = ''
 		self.keep_alive = True
 		self.requests_handled = 0
+		self.start_time = time.time()
 	
 	def read_and_parse_request(self, wait_time=MAX_WAIT_TIME):
-		start_time = time.time()
-		#request = ''
 		buffering = True
 		while buffering:
-			elapsed_time = time.time() - start_time
+			elapsed_time = time.time() - self.start_time
 			if elapsed_time > wait_time:
 				raise socket.timeout
 			self.socket.settimeout(wait_time - elapsed_time)
@@ -226,6 +225,7 @@ class HTTP_handler(object):
 					self.request_buffer = remaining_request
 					return status_line, header_dict, body[:content_length]
 			
+		
 		raise BadRequestException
 	
 	def parse_request(self, request):
@@ -281,17 +281,17 @@ class HTTP_handler(object):
 					self.keep_alive = False
 			except socket.timeout:
 				HTTP_Responder(self.socket).reply_timed_out()
-				return
+				break
 			except BadRequestException:
 				HTTP_Responder(self.socket).reply_invalid_request()
-				return
+				break
 		
 			# Split status line into method and path
 			try:			
 				method, path = self.method_and_path_from_line(status_line)
 			except BadRequestException:
 				HTTP_Responder(self.socket).reply_invalid_request()
-				return
+				break
 		
 			# Route request to the CGI or static handler
 			if path.startswith('/cgi-bin/'):
@@ -303,6 +303,7 @@ class HTTP_handler(object):
 			self.requests_handled += 1
 			print self.requests_handled
 		self.socket.close()
+		print 'closed socket'
 	
 
 
